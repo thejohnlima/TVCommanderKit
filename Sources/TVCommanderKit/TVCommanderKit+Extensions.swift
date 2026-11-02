@@ -245,6 +245,21 @@ extension TVRemoteCommand {
     }
 }
 
+// MARK: TVAppLaunchCommand
+
+extension TVAppLaunchCommand {
+    static func createLaunchCommand(_ tvApp: TVApp, metaTag: String, actionType: TVAppLaunchCommand.Params.ActionType) -> TVAppLaunchCommand {
+        TVAppLaunchCommand(
+            params: .init(
+                data: .init(
+                    appId: tvApp.id,
+                    actionType: actionType,
+                    metaTag: metaTag
+                )
+            )
+        )
+    }
+}
 
 // MARK: URL
 
@@ -253,4 +268,3 @@ extension URL {
         absoluteString.removingPercentEncoding.flatMap(URL.init(string:))
     }
 }
-

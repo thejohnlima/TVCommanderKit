@@ -318,6 +318,65 @@ public struct TVRemoteCommand: Encodable {
     }
 }
 
+/// Command that asks the TV to launch an app, optionally deep linking into content.
+///
+/// Sent as `ms.channel.emit` with the `ed.apps.launch` event. `metaTag` is interpreted by the
+/// target app, so its format differs per app and may be ignored by some apps and firmware.
+public struct TVAppLaunchCommand: Encodable {
+    public enum Method: String, Encodable {
+        case channelEmit = "ms.channel.emit"
+    }
+
+    public struct Params: Encodable {
+        public enum Event: String, Encodable {
+            case appsLaunch = "ed.apps.launch"
+        }
+
+        public enum ActionType: String, Encodable {
+            /// Launch the app and pass `metaTag` to it as a deep link
+            case deepLink = "DEEP_LINK"
+            /// Launch the app natively (used for system apps such as the browser)
+            case nativeLaunch = "NATIVE_LAUNCH"
+        }
+
+        public struct Payload: Encodable {
+            public let appId: String
+            public let actionType: ActionType
+            public let metaTag: String
+
+            enum CodingKeys: String, CodingKey {
+                case appId
+                case actionType = "action_type"
+                case metaTag
+            }
+
+            public init(appId: String, actionType: ActionType, metaTag: String) {
+                self.appId = appId
+                self.actionType = actionType
+                self.metaTag = metaTag
+            }
+        }
+
+        public let event: Event
+        public let to: String
+        public let data: Payload
+
+        public init(event: Event = .appsLaunch, to: String = "host", data: Payload) {
+            self.event = event
+            self.to = to
+            self.data = data
+        }
+    }
+
+    public let method: Method
+    public let params: Params
+
+    public init(method: Method = .channelEmit, params: Params) {
+        self.method = method
+        self.params = params
+    }
+}
+
 public struct TVResponse<Body: Codable>: Codable {
     public let data: Body?
     public let event: TVChannelEvent

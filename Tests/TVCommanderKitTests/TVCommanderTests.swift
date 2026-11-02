@@ -202,6 +202,149 @@ final class TVCommanderTests: XCTestCase {
         XCTAssertEqual(keys, keysSent)
     }
 
+    // MARK: Launch Apps
+
+    func test_launchApp_notConnected_error() {
+        // given
+        XCTAssertFalse(tvCommander.isConnected)
+
+        // when
+        let expectation = expectation(description: "error")
+        var error: TVCommanderError?
+
+        delegate.onTVCommanderError = {
+            error = $0
+            expectation.fulfill()
+        }
+
+        tvCommander.launchApp(.netflix(), metaTag: "80091866")
+
+        wait(for: [expectation], timeout: 0.5)
+
+        // then
+        switch error {
+        case .remoteCommandNotConnectedToTV:
+            break
+        default:
+            XCTFail("wrong error received")
+        }
+
+        XCTAssertTrue(engine.writtenStrings.isEmpty)
+    }
+
+    func test_launchApp_notAuth_error() {
+        // given
+        var expectation = expectation(description: "connect")
+
+        delegate.onTVCommanderDidConnect = {
+            expectation.fulfill()
+        }
+
+        tvCommander.connectToTV()
+
+        wait(for: [expectation], timeout: 0.5)
+
+        XCTAssertNotEqual(tvCommander.authStatus, .allowed)
+
+        // when
+        expectation = self.expectation(description: "error")
+
+        var error: TVCommanderError?
+
+        delegate.onTVCommanderError = {
+            error = $0
+            expectation.fulfill()
+        }
+
+        tvCommander.launchApp(.netflix(), metaTag: "80091866")
+
+        wait(for: [expectation], timeout: 0.5)
+
+        // then
+        switch error {
+        case .remoteCommandAuthenticationStatusNotAllowed:
+            break
+        default:
+            XCTFail("wrong error received")
+        }
+
+        XCTAssertTrue(engine.writtenStrings.isEmpty)
+    }
+
+    func test_launchApp_ideal_sentAsAppsLaunchEvent() throws {
+        // given
+        var expectation = expectation(description: "connect")
+
+        delegate.onTVCommanderDidConnect = {
+            expectation.fulfill()
+        }
+
+        tvCommander.connectToTV()
+
+        wait(for: [expectation], timeout: 0.5)
+
+        tvCommander.webSocketDidReadAuthStatus(.allowed)
+
+        // when
+        expectation = self.expectation(description: "launch")
+
+        tvCommander.launchApp(.netflix(), metaTag: "80091866") {
+            expectation.fulfill()
+        }
+
+        wait(for: [expectation], timeout: 0.5)
+
+        // then
+        XCTAssertEqual(engine.writtenStrings.count, 1)
+
+        let json = try XCTUnwrap(engine.writtenStrings.first?.asJSON)
+
+        XCTAssertEqual(json["method"] as? String, "ms.channel.emit")
+
+        let params = try XCTUnwrap(json["params"] as? [String: Any])
+
+        XCTAssertEqual(params["event"] as? String, "ed.apps.launch")
+        XCTAssertEqual(params["to"] as? String, "host")
+
+        let data = try XCTUnwrap(params["data"] as? [String: Any])
+
+        XCTAssertEqual(data["appId"] as? String, TVApp.netflix().id)
+        XCTAssertEqual(data["action_type"] as? String, "DEEP_LINK")
+        XCTAssertEqual(data["metaTag"] as? String, "80091866")
+    }
+
+    func test_launchApp_defaults_launchesWithEmptyMetaTag() throws {
+        // given
+        var expectation = expectation(description: "connect")
+
+        delegate.onTVCommanderDidConnect = {
+            expectation.fulfill()
+        }
+
+        tvCommander.connectToTV()
+
+        wait(for: [expectation], timeout: 0.5)
+
+        tvCommander.webSocketDidReadAuthStatus(.allowed)
+
+        // when
+        expectation = self.expectation(description: "launch")
+
+        tvCommander.launchApp(.youtube(), actionType: .nativeLaunch) {
+            expectation.fulfill()
+        }
+
+        wait(for: [expectation], timeout: 0.5)
+
+        // then
+        let json = try XCTUnwrap(engine.writtenStrings.first?.asJSON)
+        let params = try XCTUnwrap(json["params"] as? [String: Any])
+        let data = try XCTUnwrap(params["data"] as? [String: Any])
+
+        XCTAssertEqual(data["action_type"] as? String, "NATIVE_LAUNCH")
+        XCTAssertEqual(data["metaTag"] as? String, "")
+    }
+
     // MARK: Disconnects
 
     func test_disconnect_connectedAuthed_disconnectedAndReset() throws {
@@ -251,6 +394,7 @@ private class MockTVWebSocketEngine: Engine {
 
     var mockReadDelay = TimeInterval(0)
     var mockReadPacket: String?
+    private(set) var writtenStrings = [String]()
     private var mockRead: DispatchWorkItem?
 
     func register(delegate: EngineDelegate) {
@@ -284,6 +428,7 @@ private class MockTVWebSocketEngine: Engine {
     }
 
     func write(string: String, completion: (() -> ())?) {
+        writtenStrings.append(string)
         completion?()
     }
 }

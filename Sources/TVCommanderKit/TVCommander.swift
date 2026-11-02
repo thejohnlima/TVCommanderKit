@@ -105,6 +105,41 @@ public class TVCommander: WebSocketDelegate {
         sendCommandOverWebSocket(.createTextInputCommand(text))
     }
 
+    // MARK: Launch Apps
+
+    /// Launches an app on the TV over the WebSocket connection, optionally deep linking into content.
+    ///
+    /// - Parameters:
+    ///   - tvApp: The app to launch.
+    ///   - metaTag: App-specific content identifier (e.g. a movie or episode ID). Pass an empty
+    ///     string to just launch the app. The format is defined by each app and is not
+    ///     documented by Samsung; some apps and firmware versions ignore it and only open the app.
+    ///   - actionType: `.deepLink` for streaming apps, `.nativeLaunch` for system apps.
+    ///   - completion: Called after the command has been written to the socket. This does not
+    ///     confirm that the TV opened the content; use `TVAppManager.fetchStatus` to check the app.
+    public func launchApp(
+        _ tvApp: TVApp,
+        metaTag: String = "",
+        actionType: TVAppLaunchCommand.Params.ActionType = .deepLink,
+        completion: (() -> Void)? = nil
+    ) {
+        guard isConnected else {
+            return handleError(.remoteCommandNotConnectedToTV)
+        }
+
+        guard authStatus == .allowed else {
+            return handleError(.remoteCommandAuthenticationStatusNotAllowed)
+        }
+
+        let command = TVAppLaunchCommand.createLaunchCommand(tvApp, metaTag: metaTag, actionType: actionType)
+
+        guard let commandStr = try? command.asString() else {
+            return handleError(.commandConversionToStringFailed)
+        }
+
+        webSocket?.write(string: commandStr, completion: completion)
+    }
+
     private func sendCommandOverWebSocket(_ command: TVRemoteCommand) {
         commandQueue.append(command)
         if commandQueue.count == 1 {

@@ -15,6 +15,7 @@
 - [Text Entry](#text-entry)
 - [Wake on LAN](#wake-on-lan)
 - [Managing TV Apps](#managing-tv-apps)
+- [Opening Content in an App (Deep Linking)](#opening-content-in-an-app-deep-linking)
 - [License](#license)
 
 ## Usage
@@ -217,6 +218,40 @@ TVCommander.wakeOnLAN(device: device) { error in
    ```
 
 Errors like invalid URLs or app not found are handled by `TVAppManagerError` and `TVAppNetworkError`.
+
+## Opening Content in an App (Deep Linking)
+
+`TVCommander.launchApp(_:metaTag:actionType:completion:)` launches an app over the WebSocket connection and passes an app-specific content identifier as the `metaTag`. The TV must be connected and authorized.
+
+```swift
+// Opens the Netflix app and asks it to open a title
+tvCommander.launchApp(.netflix(), metaTag: "<content id>") {
+    print("Launch command written to the TV")
+}
+
+// Launches the app only (empty metaTag)
+tvCommander.launchApp(.hulu())
+```
+
+This sends the following message to the TV:
+
+```json
+{
+  "method": "ms.channel.emit",
+  "params": {
+    "event": "ed.apps.launch",
+    "to": "host",
+    "data": { "appId": "<app id>", "action_type": "DEEP_LINK", "metaTag": "<content id>" }
+  }
+}
+```
+
+**Limitations**
+
+- The `metaTag` format is defined by each streaming app and is not documented by Samsung. Check with the app's own documentation or test on your TV.
+- Some apps and firmware versions ignore the `metaTag` and only open the app. Reports on Tizen 9 suggest this for Netflix, Disney+ and HBO Max, while Prime Video has been reported to open a title.
+- The `completion` closure only confirms the command was written to the socket. It does not confirm that the TV opened the content. Use `TVAppManager.fetchStatus(for:tvIPAddress:)` to check whether the app is running.
+- Use `.nativeLaunch` as the `actionType` for system apps.
 
 ## License
 
